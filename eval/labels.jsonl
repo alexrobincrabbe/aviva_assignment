@@ -1,5 +1,4 @@
-{"thread_id": "thread_001", "classification": "action_required", "priority": "P1", "notes": "Example: Broker escalation requiring response"}
-{"thread_id": "thread_002", "classification": "informational_archive", "priority": "P3", "notes": "Example: Confirmation email, no action needed"}
-{"thread_id": "thread_003", "classification": "action_required", "priority": "P0", "notes": "Example: Urgent regulatory issue"}
-{"thread_id": "", "classification": "", "priority": "", "notes": "Template: Fill in thread_id, classification (action_required|informational_archive|irrelevant), priority (P0|P1|P2|P3)"}
-{"thread_id": "", "classification": "", "priority": "", "notes": "Template: Copy this line and fill in values for each thread you want to evaluate"}
+{"thread_id":"hr_hom_533661_ab10_17","classification":"action_required","priority":"P2"}
+{"thread_id":"thr_info_cs_feedback_41","classification": "informational_archive","priority": "P3"}
+{"thread_id":"thr_hom_483912_m20_06","classification":"action_required","priority":"P2"}
+{"thread_id":"thr_mtr_552301_sheffield_08","classification": "action_required","priority":"P2"}

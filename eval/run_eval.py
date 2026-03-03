@@ -7,7 +7,7 @@ import re
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 # Add parent directory to path to allow imports when run directly
 if __name__ == '__main__':

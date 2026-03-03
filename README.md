@@ -55,7 +55,7 @@ Generates a single-view summary of:
 - Informational threads
 - Irrelevant items
 
-Output: `digest.txt`
+Output: `digest.md`
 
 ---
 
@@ -109,6 +109,32 @@ Includes evaluation tools for:
 - Confusion matrices
 - Optional PII detection check
 
+### Running Evaluation
+
+Evaluate triage predictions against gold labels:
+
+```bash
+python -m eval.run_eval --predictions out/triage_results.jsonl --labels eval/labels.jsonl
+```
+
+The evaluation script compares predicted classifications and priorities against gold labels and outputs:
+
+- Overall accuracy metrics
+- Classification confusion matrix
+- Priority confusion matrix
+
+**Options:**
+
+- `--predictions`: Path to predicted `triage_results.jsonl` file (required)
+- `--labels`: Path to gold `labels.jsonl` file (required)
+- `--pii-check`: Check for PII (emails, phone numbers) in predicted outputs
+
+**Example:**
+
+```bash
+python -m eval.run_eval --predictions out/triage_results.jsonl --labels eval/labels.jsonl
+```
+
 ---
 
 # Installation
@@ -117,7 +143,7 @@ Includes evaluation tools for:
 
 - Python 3.11+
 - See `requirements.txt`
-- OpenAI API key (unless using `--dry-run`)
+- OpenAI API key
 
 ---
 
@@ -131,20 +157,30 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Set environment variables:
+### Configuration
+
+Create a `.env` file in the project root:
 
 ```bash
-export OPENAI_API_KEY=your_api_key_here
-export OPENAI_MODEL=gpt-4o-mini
+OPENAI_API_KEY=your_api_key_here
+OPENAI_MODEL=gpt-4o-mini
 ```
 
-Windows PowerShell:
+**Note:** The `.env` file is automatically loaded when the application starts. The API key is required for all LLM operations. If `OPENAI_MODEL` is not set, it defaults to `gpt-4o-mini`.
 
-```powershell
-setx OPENAI_API_KEY "your_api_key_here"
+### Logging Configuration
+
+Create a `config.json` file in the project root (optional, defaults to INFO):
+
+```json
+{
+  "logging": {
+    "level": "INFO"
+  }
+}
 ```
 
-You may also pass `--api-key` and `--model` via CLI arguments.
+Supported logging levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 
 ---
 
@@ -166,12 +202,11 @@ python -m app.main triage --in emails.json --out out/triage_results.jsonl
 
 Options:
 
-- `--model`
-- `--dry-run`
-- `--no-redact`
-- `--max-threads`
-- `--api-key`
-- `--overwrite`
+- `--max-threads`: Maximum number of threads to process (default: process all)
+- `--no-redact`: Disable redaction before sending data to the LLM (NOT recommended)
+- `--overwrite`: Overwrite output file and re-triage all threads (default: skip threads already in output)
+
+By default, the command skips threads that have already been triaged (if the output file exists). Use `--overwrite` to re-triage all threads.
 
 ---
 
@@ -183,8 +218,8 @@ python -m app.main digest --in out/triage_results.jsonl --outdir out/
 
 Outputs:
 
-- `out/digest.txt`
-- `out/actions_log.jsonl`
+- `out/digest.md` - Markdown-formatted daily digest
+- `out/actions_log.jsonl` - Audit trail of system decisions
 
 ---
 
@@ -196,9 +231,7 @@ python -m app.main ask --data out/triage_results.jsonl "What should I do first t
 
 Optional:
 
-- `--top-k`
-- `--model`
-- `--api-key`
+- `--top-k`: Number of candidates for RAG retrieval (default: 5)
 
 ---
 
@@ -206,15 +239,40 @@ Optional:
 
 ```
 app/
+  __init__.py
+  main.py                    # Shim for backward compatibility
+  utils.py                   # Path resolution utilities
   cli/
+    __init__.py
+    main.py                  # CLI entry point (argparse)
+    commands/
+      __init__.py
+      triage.py              # Triage command handler
+      digest.py              # Digest command handler
+      ask.py                 # Ask command handler
+      utils.py               # CLI utilities (logging setup)
   domain/
+    __init__.py
+    models.py                # Pydantic models and JSONL helpers
+    loader.py                # Email data loading
+    triage.py                # Triage logic
+    digest.py                # Digest generation
+    ask.py                   # Ask/RAG logic
+    actions_log.py           # Actions log generation
   infra/
-  utils/
+    __init__.py
+    llm.py                   # LLM client (OpenAI)
+    redact.py                # PII redaction
+    query_engine.py          # Structured query engine
 
-prompts/
-eval/
-out/
-emails.json
+prompts/                     # LLM prompt templates
+eval/                        # Evaluation scripts
+out/                         # Output directory
+config.json                  # Logging configuration
+.env                         # Environment variables (API keys)
+emails.json                  # Input email data
+README.md
+requirements.txt
 ```
 
 ---
@@ -223,7 +281,9 @@ emails.json
 
 ## PII Redaction
 
-Optional redaction (`--redact`) replaces:
+Redaction is enabled by default. Use `--no-redact` to disable it.
+
+When enabled, redaction replaces:
 
 - Email addresses → `<EMAIL_1>`
 - Phone numbers → `<PHONE_1>`
@@ -233,52 +293,59 @@ Operational identifiers (e.g., claim references) are not redacted.
 
 ## PII Check in Evaluation
 
+The evaluation script can optionally check for PII (emails, phone numbers) in predicted outputs. If PII is detected, the evaluation will fail with details about where it was found. This helps ensure that redaction is working correctly.
+
 ```bash
-python -m eval.run_eval \
-  --predictions out/triage_results.jsonl \
-  --labels eval/labels.jsonl \
-  --pii-check
+python -m eval.run_eval --predictions out/triage_results.jsonl --labels eval/labels.jsonl --pii-check
 ```
 
 ---
 
 # Architecture Overview
 
-The system separates concerns into:
+The system uses a modular architecture separating concerns:
 
-- Domain logic – triage rules, digest generation
-- Infrastructure – LLM client, redaction, structured query engine
-- CLI layer – command orchestration
+- **CLI Layer** (`app/cli/`) – Command-line interface and argument parsing
+  - `main.py` – Entry point with argparse setup
+  - `commands/` – Individual command handlers (triage, digest, ask)
+  
+- **Domain Logic** (`app/domain/`) – Business logic and data models
+  - `models.py` – Pydantic models and JSONL I/O
+  - `triage.py` – Email triage classification logic
+  - `digest.py` – Daily digest generation
+  - `ask.py` – Query routing and RAG implementation
+  - `loader.py` – Email data loading and parsing
+  - `actions_log.py` – Audit trail generation
 
-This enables:
+- **Infrastructure** (`app/infra/`) – External services and utilities
+  - `llm.py` – OpenAI LLM client wrapper
+  - `redact.py` – PII redaction utilities
+  - `query_engine.py` – Deterministic structured query execution
 
-- Replaceable LLM provider
-- Deterministic filtering
-- Clear audit trail
-- Controlled use of RAG
+- **Utilities** (`app/utils.py`) – Path resolution and common helpers
+
+This architecture enables:
+
+- Replaceable LLM provider (via `infra/llm.py`)
+- Deterministic filtering (via `infra/query_engine.py`)
+- Clear audit trail (via `domain/actions_log.py`)
+- Controlled use of RAG (via `domain/ask.py`)
+- Configuration via `.env` and `config.json` files
 
 ---
 
 # Limitations
 
-- Requires LLM API for full functionality
 - Keyword-based retrieval (no vector embeddings)
 - Sequential thread processing
 - No real mailbox integration (JSON input only)
-- Optimised for English email content
 
 ---
 
 # Future Improvements
 
-- Vector-based retrieval
+- Vector-based retrieval (possibly?)
 - Parallel triage processing
-- Multi-provider LLM support
-- Secure hosted deployment
 - Enhanced name-level PII detection (NER-based)
 
 ---
-
-# License
-
-[Add license here]

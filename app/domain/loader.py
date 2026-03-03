@@ -5,7 +5,6 @@ import logging
 import re
 from pathlib import Path
 from typing import List, Dict
-from datetime import datetime
 
 from app.domain.models import EmailData, EmailThread, Message, Attachment, EmailMessage
 

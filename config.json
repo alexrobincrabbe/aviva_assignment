@@ -1,0 +1,6 @@
+{
+  "logging": {
+    "level": "INFO"
+  },
+  "_comment": "Logging levels: DEBUG, INFO, WARNING, ERROR, CRITICAL"
+}

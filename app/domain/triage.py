@@ -85,56 +85,9 @@ Body:
     return formatted
 
 
-def _generate_placeholder_result(thread: EmailThread) -> ThreadTriageResult:
-    """
-    Generate a placeholder triage result for dry-run mode.
-    
-    Args:
-        thread: Email thread to generate placeholder for
-        
-    Returns:
-        ThreadTriageResult with placeholder values
-    """
-    if not thread.messages:
-        raise ValueError("Thread has no messages")
-    
-    thread_id = thread.messages[0].thread_id
-    first_message = thread.messages[0]
-    
-    # Generate placeholder based on thread content
-    subject_lower = first_message.subject.lower() if first_message.subject else ""
-    
-    # Simple heuristics for placeholder classification
-    if any(word in subject_lower for word in ["urgent", "escalation", "deadline", "asap"]):
-        classification = "action_required"
-        priority = "P1"
-    elif any(word in subject_lower for word in ["confirmation", "acknowledgment", "receipt"]):
-        classification = "informational_archive"
-        priority = "P3"
-    else:
-        classification = "action_required"
-        priority = "P2"
-    
-    return ThreadTriageResult(
-        thread_id=thread_id,
-        classification=classification,
-        priority=priority,
-        due_by=None,
-        topic=f"Placeholder topic for thread {thread_id[:8]}",
-        summary=f"Placeholder summary: {first_message.subject[:100] if first_message.subject else 'No subject'}",
-        required_actions=["[DRY-RUN] Review thread content", "[DRY-RUN] Determine actual classification"],
-        key_entities={},
-        evidence_snippets=[first_message.subject[:50] if first_message.subject else "No subject"],
-        confidence=0.5
-    )
-
-
 def triage_email_thread(
     thread: EmailThread,
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
-    redact: bool = False,
-    dry_run: bool = False
+    redact: bool = False
 ) -> ThreadTriageResult:
     """
     Triage a single email thread.
@@ -144,11 +97,6 @@ def triage_email_thread(
 
     thread_id = thread.messages[0].thread_id
     logger.info(f"Triaging thread {thread_id} with {len(thread.messages)} messages")
-
-    # Dry-run mode: return placeholder result
-    if dry_run:
-        logger.info(f"[DRY-RUN] Generating placeholder result for thread {thread_id}")
-        return _generate_placeholder_result(thread)
 
     system_prompt, user_prompt_template = load_triage_prompts()
 
@@ -171,9 +119,7 @@ def triage_email_thread(
     result = call_llm_json(
         model_cls=ThreadTriageResult,
         system=system_prompt,
-        user=user_prompt,
-        model=model,
-        api_key=api_key
+        user=user_prompt
     )
 
     # Ensure thread_id matches (in case LLM returned different one)
@@ -218,33 +164,23 @@ def triage_email_thread(
 
 def triage_emails(
     email_data: EmailData,
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
     redact: bool = False,
-    max_threads: Optional[int] = None,
-    dry_run: bool = False
+    max_threads: Optional[int] = None
 ) -> List[ThreadTriageResult]:
     """
     Triage all email threads.
     
     Args:
         email_data: Email data to triage
-        model: LLM model name (optional)
-        api_key: LLM API key (optional)
         redact: Whether to redact sensitive data
         max_threads: Maximum number of threads to process (None = all)
-        dry_run: If True, skip LLM calls and generate placeholder results for 2 threads
         
     Returns:
         List of ThreadTriageResult objects
     """
     threads_to_process = email_data.emails
     
-    # In dry-run mode, limit to 2 threads
-    if dry_run:
-        threads_to_process = threads_to_process[:2]
-        logger.info(f"[DRY-RUN] Processing {len(threads_to_process)} threads (dry-run mode)")
-    elif max_threads is not None and max_threads > 0:
+    if max_threads is not None and max_threads > 0:
         threads_to_process = threads_to_process[:max_threads]
         logger.info(f"Processing {len(threads_to_process)} of {len(email_data.emails)} threads (max_threads={max_threads})")
     else:
@@ -253,7 +189,7 @@ def triage_emails(
     results = []
     for i, thread in enumerate(threads_to_process, 1):
         try:
-            result = triage_email_thread(thread, model=model, api_key=api_key, redact=redact, dry_run=dry_run)
+            result = triage_email_thread(thread, redact=redact)
             results.append(result)
             logger.debug(f"Completed {i}/{len(threads_to_process)}")
         except Exception as e:

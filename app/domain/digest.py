@@ -1,7 +1,7 @@
 """Email digest generation module."""
 
 import logging
-from typing import List, Optional
+from typing import List
 from collections import Counter
 
 from app.domain.models import ThreadTriageResult
@@ -29,17 +29,13 @@ def load_digest_prompts() -> str:
 
 
 def generate_digest(
-    triage_results: List[ThreadTriageResult],
-    model: Optional[str] = None,
-    api_key: Optional[str] = None
+    triage_results: List[ThreadTriageResult]
 ) -> str:
     """
     Generate a digest summary from triage results.
 
     Args:
         triage_results: List of ThreadTriageResult objects
-        model: LLM model name (optional)
-        api_key: LLM API key (optional)
 
     Returns:
         Digest text as string
@@ -74,32 +70,32 @@ def generate_digest(
     # Build structured input for LLM
     # ─────────────────────────────────────────────
     digest_content = f"""
-Total threads: {len(triage_results)}
+        Total threads: {len(triage_results)}
 
-Priority counts:
-P0: {priority_counts.get("P0", 0)}
-P1: {priority_counts.get("P1", 0)}
-P2: {priority_counts.get("P2", 0)}
-P3: {priority_counts.get("P3", 0)}
+        Priority counts:
+        P0: {priority_counts.get("P0", 0)}
+        P1: {priority_counts.get("P1", 0)}
+        P2: {priority_counts.get("P2", 0)}
+        P3: {priority_counts.get("P3", 0)}
 
-Classification counts:
-action_required: {classification_counts.get("action_required", 0)}
-informational_archive: {classification_counts.get("informational_archive", 0)}
-irrelevant: {classification_counts.get("irrelevant", 0)}
+        Classification counts:
+        action_required: {classification_counts.get("action_required", 0)}
+        informational_archive: {classification_counts.get("informational_archive", 0)}
+        irrelevant: {classification_counts.get("irrelevant", 0)}
 
-P0/P1 due today or COB:
-{", ".join(due_today_threads) if due_today_threads else "None"}
+        P0/P1 due today or COB:
+        {", ".join(due_today_threads) if due_today_threads else "None"}
 
-Threads:
-"""
+        Threads:
+        """
 
     for result in sorted_results:
         digest_content += f"""
-Thread: {result.thread_id}
-  Topic: {result.topic}
-  Classification: {result.classification}
-  Priority: {result.priority}
-"""
+            Thread: {result.thread_id}
+            Topic: {result.topic}
+            Classification: {result.classification}
+            Priority: {result.priority}
+            """
         if result.due_by:
             digest_content += f"  Due by: {result.due_by}\n"
 
@@ -115,21 +111,19 @@ Thread: {result.thread_id}
     # ─────────────────────────────────────────────
     user_prompt = f"""Generate the daily operational digest in Markdown using the required structure in the system prompt.
 
-Use the statistics exactly as provided above.
-Do not recalculate counts.
-Do not invent threads.
-Do not introduce data not present.
+        Use the statistics exactly as provided above.
+        Do not recalculate counts.
+        Do not invent threads.
+        Do not introduce data not present.
 
-Structured triage input:
-{digest_content}
-"""
+        Structured triage input:
+        {digest_content}
+        """
 
     # Call LLM
     response = call_llm_raw(
         system=system_prompt,
-        user=user_prompt,
-        model=model,
-        api_key=api_key
+        user=user_prompt
     )
 
     logger.info("Successfully generated digest")

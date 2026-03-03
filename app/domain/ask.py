@@ -236,8 +236,6 @@ def _handle_rag_answer(
     results: List[ThreadTriageResult],
     question: str,
     top_k: int,
-    model: str | None,
-    api_key: str | None,
     decision: Optional[AskRouterDecision] = None,
 ) -> None:
     """Handle RAG-based answer (summarize_subset or trend_analysis)."""
@@ -356,7 +354,7 @@ def _handle_rag_answer(
     system_prompt = _load_rag_answer_prompt()
 
     logger.info(f"Calling RAG LLM with {len(candidates)} candidates")
-    answer = call_llm_raw(system=system_prompt, user=user_prompt, model=model, api_key=api_key)
+    answer = call_llm_raw(system=system_prompt, user=user_prompt)
 
     try:
         assert_no_pii(answer)
@@ -390,9 +388,7 @@ def _handle_unanswerable(question: str) -> None:
 def ask_command(
     triage_results_path: str,
     question: str,
-    model: str | None = None,
     top_k: int = 5,
-    api_key: str | None = None,
 ) -> None:
     """
     Execute the ask command to answer questions about triage results.
@@ -400,9 +396,7 @@ def ask_command(
     Args:
         triage_results_path: Path to triage_results.jsonl file
         question: Question to answer
-        model: LLM model name (optional)
         top_k: Number of candidates for RAG retrieval (default: 5)
-        api_key: Optional LLM API key
     """
     logger.info(f"Ask command: {question}")
     
@@ -436,9 +430,7 @@ Output the routing decision as JSON."""
         decision = call_llm_json(
             model_cls=AskRouterDecision,
             system=router_prompt,
-            user=router_user,
-            model=model,
-            api_key=api_key
+            user=router_user
         )
         logger.info(f"Router decision: intent={decision.intent}, needs_rag={decision.needs_rag}, confidence={decision.confidence}")
         if decision.structured_query:
@@ -456,13 +448,13 @@ Output the routing decision as JSON."""
     
     elif decision.intent in ("summarize_subset", "trend_analysis"):
         if decision.needs_rag:
-            _handle_rag_answer(results, question, top_k, model, api_key, decision=decision)
+            _handle_rag_answer(results, question, top_k, decision=decision)
         else:
             # Fallback: if needs_rag is False but intent suggests RAG, use structured query if available
             if decision.structured_query:
                 _handle_filter_lookup(results, decision, question)
             else:
-                _handle_rag_answer(results, question, top_k, model, api_key, decision=decision)
+                _handle_rag_answer(results, question, top_k, decision=decision)
     
 
     elif decision.intent == "smalltalk":
@@ -481,7 +473,7 @@ Output the routing decision as JSON."""
 
         if best_score >= 0.15:
             logger.info(f"Router said unanswerable but retrieval found candidates (best_score={best_score:.2f}). Falling back to RAG.")
-            _handle_rag_answer(results, question, top_k, model, api_key, decision=decision)
+            _handle_rag_answer(results, question, top_k, decision=decision)
         else:
             _handle_unanswerable(question)
 
